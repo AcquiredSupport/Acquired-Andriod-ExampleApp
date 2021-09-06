@@ -4,11 +4,6 @@ object Versions {
     const val compose = "1.0.0-rc01"
 }
 
-object SDKInfo {
-    const val version = "0.0.1"
-    const val group = "com.acquired.paymentgateway"
-}
-
 object Libraries {
     private object LibVersions {
         //run "gradlew dependencyUpdates" "./gradlew dependencyUpdates" (mac/linux) to check if there are updates to the dependencies

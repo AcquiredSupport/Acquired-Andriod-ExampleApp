@@ -11,7 +11,7 @@ android {
         minSdk = 23
         targetSdk = 30
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.0.3"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -48,7 +48,7 @@ android {
 }
 
 dependencies {
-    implementation("com.acquired.paymentgateway:paymentgateway:0.0.1")
+    implementation("com.acquired.paymentgateway:paymentgateway:0.0.3")
 
     implementation(Libraries.viewModelKTX)
 

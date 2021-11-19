@@ -4,12 +4,12 @@ plugins {
 }
 
 android {
-    compileSdk = 30
-    buildToolsVersion = "30.0.3"
+    compileSdk = 31
+    buildToolsVersion = "31.0.0"
 
     defaultConfig {
         minSdk = 23
-        targetSdk = 30
+        targetSdk = 31
         versionCode = 1
         versionName = "0.0.3"
         vectorDrawables {
@@ -48,11 +48,11 @@ android {
 }
 
 dependencies {
-    implementation("com.acquired.paymentgateway:paymentgateway:0.0.3")
+    implementation("com.acquired.paymentgateway:paymentgateway:0.0.4")
 
     implementation(Libraries.viewModelKTX)
 
-    implementation("androidx.compose.ui:ui-viewbinding:1.0.0-rc01")
+    implementation(Libraries.composeViewBinding)
     implementation(Libraries.material)
     implementation(Libraries.composeViewModel)
     implementation(Libraries.composeUI)
@@ -61,6 +61,8 @@ dependencies {
     implementation(Libraries.lifeCycleKTX)
     implementation(Libraries.composeActivity)
     implementation(Libraries.composeLiveData)
+
+    implementation(Libraries.composeNavigation)
 
     coreLibraryDesugaring(Libraries.desugar)
 

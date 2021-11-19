@@ -3,6 +3,7 @@ package com.acquired.exampleapp
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,10 +25,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.acquired.exampleapp.data.ExampleAppViewModel
+import com.acquired.exampleapp.data.ToastEvent
+import com.acquired.exampleapp.data.WebViewEvent
 import com.acquired.exampleapp.ui.theme.ACQPaymentGatewayTheme
 import com.acquired.exampleapp.ui.theme.Purple200
 import com.acquired.sdk.core.paymentmethods.CardMethod
@@ -48,23 +57,60 @@ class MainActivity : ComponentActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
         val model: ExampleAppViewModel by viewModels()
-
-
         model.handleOnActivityResult(requestCode, resultCode, data)
     }
 }
 
 @Composable
 fun MainContent(model: ExampleAppViewModel = viewModel()) {
+    val navController = rememberNavController()
+    val webView = WebView(LocalContext.current)
+    NavHost(
+        navController = navController,
+        startDestination = "paymentScreen"
+    ) {
+        composable("paymentScreen") {
+            //resets the web view to a blank page
+            webView.loadUrl("about:blank")
+            PaymentScreen(navController, model, webView)
+        }
+        composable("webpageContent") {
+            WebPageContent(webView)
+        }
+        composable("billingInfo") {
+            BillingInfo(navController = navController, mainViewModel = model)
+        }
+    }
+}
+
+@Composable
+fun PaymentScreen(navController: NavController, model: ExampleAppViewModel, webView: WebView) {
 
     val list: List<PaymentMethod> by model.paymentMethodsLiveData.observeAsState(listOf())
     val context = LocalContext.current
 
-    model.toastMessageEventLiveData.observeForever {
+    val showErrorDialog by model.showErrorDialog.observeAsState(false)
+    val currency by model.currency.observeAsState("")
+
+    model.eventLiveData.observeForever {
         it?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            when (it) {
+                is ToastEvent -> {
+                    it.get()?.let { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                }
+                is WebViewEvent -> {
+                    it.get()?.let { active ->
+                        if (active) {
+                            navController.navigate("webpageContent")
+                        } else {
+                            navController.navigate("paymentScreen")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -82,17 +128,21 @@ fun MainContent(model: ExampleAppViewModel = viewModel()) {
                     modifier = Modifier.padding(16.dp)
                 )
                 Text(
-                    text = "12.34 $",
+                    text = "12.34 $currency",
                     modifier = Modifier.padding(16.dp)
                 )
             }
         }
 
         Divider()
-
         LazyColumn {
             items(items = list) {
-                PaymentMethodItem(paymentMethod = it)
+                PaymentMethodItem(
+                    navController = navController,
+                    paymentMethod = it,
+                    model = model,
+                    webView = webView
+                )
             }
         }
         Row {
@@ -103,10 +153,41 @@ fun MainContent(model: ExampleAppViewModel = viewModel()) {
             }
         }
     }
+
+    val dialogTitle by model.dialogTitle.observeAsState()
+    val dialogMessage by model.dialogMessage.observeAsState()
+
+    if (showErrorDialog) {
+        AlertDialog(onDismissRequest = {
+            model.showErrorDialog.value = false
+        },
+            title = {
+                Text(text = dialogTitle ?: "")
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(dialogMessage ?: "")
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                Button(
+                    onClick = {
+                        model.showErrorDialog.value = false
+                    }) {
+                    Text("OK")
+                }
+            })
+    }
 }
 
 @Composable
-fun PaymentMethodItem(paymentMethod: PaymentMethod, model: ExampleAppViewModel = viewModel()) {
+fun PaymentMethodItem(
+    navController: NavController,
+    paymentMethod: PaymentMethod,
+    model: ExampleAppViewModel,
+    webView: WebView
+) {
     val context = LocalContext.current as Activity
     val isGooglePayEnabled by model.isGooglePayReadyLiveData.observeAsState(true)
 
@@ -114,7 +195,7 @@ fun PaymentMethodItem(paymentMethod: PaymentMethod, model: ExampleAppViewModel =
         //Setup the payment method with the needed ui requirements.
         when (paymentMethod) {
             is CardMethod -> {
-                paymentMethod.webView = WebView(context)
+                paymentMethod.webView = webView
             }
             is GooglePayMethod -> {
                 paymentMethod.activity = context
@@ -126,13 +207,14 @@ fun PaymentMethodItem(paymentMethod: PaymentMethod, model: ExampleAppViewModel =
             contentColor = Purple200
         )
         Row {
-            Text(text = paymentMethod.nameKey,
+            Text(
+                text = paymentMethod.nameKey,
                 modifier = Modifier
                     .padding(8.dp)
-                    .weight(2f))
+                    .weight(2f)
+            )
 
-            if (paymentMethod is GooglePayMethod){
-
+            if (paymentMethod is GooglePayMethod) {
                 OutlinedButton(
                     colors = outlineButtonColor,
                     onClick = {
@@ -142,33 +224,40 @@ fun PaymentMethodItem(paymentMethod: PaymentMethod, model: ExampleAppViewModel =
                     modifier = Modifier
                         .padding(8.dp)
                         .background(color = Color.White)
-                    ) {
-                    Image(painter = painterResource(id = R.drawable.googlepay_button_content), contentDescription = "")
-
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.googlepay_button_content),
+                        contentDescription = ""
+                    )
                 }
             } else {
                 OutlinedButton(
                     colors = outlineButtonColor,
                     onClick = {
-                        model.pay(paymentMethod)
+                        model.cardMethod = paymentMethod as CardMethod
+                        navController.navigate("billingInfo")
                     },
                     enabled = isGooglePayEnabled,
                     modifier = Modifier
                         .padding(8.dp)
                 ) {
-                    Text(text = "pay", modifier = Modifier.padding(8.dp))
+                    Text(text = "Use", modifier = Modifier.padding(8.dp))
                 }
             }
-
         }
-
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun DefaultPreview() {
-    ACQPaymentGatewayTheme {
-        MainContent()
-    }
+fun WebPageContent(webView: WebView) {
+    AndroidView(
+        factory = {
+            webView.apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+        }
+    )
 }
